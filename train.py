@@ -271,8 +271,7 @@ def get_args():
     parser.add_argument('--env', type=str, default='Pong-v0')
     parser.add_argument('-f', '--filename', type=str, default='paac.pkl',
                         help='filename to save the trained model into.')
-    parser.add_argument('-c', '--cuda', type=bool,
-                        default=torch.cuda.is_available())
+    parser.add_argument('--no-cuda', action='store_false')
     parser.add_argument('-p', '--print-step', type=int, default=100)
     parser.add_argument('-s', '--save-step', type=int, default=1000)
 
@@ -316,7 +315,9 @@ def get_args():
                         help='Epsilon for numerical stability')
     parser.add_argument('-C', '--clip', type=float, default=40.0)
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.cuda = torch.cuda.is_available() and not args.no_cuda
+    return args
 
 
 if __name__ == '__main__':

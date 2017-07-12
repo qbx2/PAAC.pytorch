@@ -15,8 +15,7 @@ def get_args():
     parser.add_argument('--env', type=str, default='Pong-v0')
     parser.add_argument('-f', '--filename', type=str, default='paac.pkl',
                         help='filename to save the trained model into.')
-    parser.add_argument('-c', '--cuda', type=bool,
-                        default=torch.cuda.is_available())
+    parser.add_argument('--no-cuda', action='store_false')
     parser.add_argument('-d', '--debug', action='store_true')
 
     return parser.parse_args()
@@ -24,6 +23,7 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
+    args.cuda = torch.cuda.is_available() and not args.no_cuda
 
     env = gym.make(args.env)
     env.env._get_obs = env.env.ale.getScreenGrayscale
