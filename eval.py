@@ -52,6 +52,10 @@ if __name__ == '__main__':
     state = torch.zeros(1, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
     score = 0
 
+    if args.cuda:
+        paac.cuda()
+        state = state.pin_memory().cuda(async=True)
+
     while True:
         state[0, :-1] = state[0, 1:]
         state[0, -1] = PAACNet.preprocess(ob)

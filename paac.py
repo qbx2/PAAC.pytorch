@@ -86,23 +86,20 @@ class PAACNet(nn.Module):
         return log_x, (x * log_x).sum()
 
     @staticmethod
-    def get_loss(q_values, values, log_a, beta, entropy):
+    def get_loss(q_values, values, log_a):
         r"""calculates policy loss and value loss
 
         :param q_values: Tensor with shape (T, N)
         :param values: Variable with shape (T, N)
         :param log_a: Variable with shape (T, N)
-        :param beta: hyperparameter that defines strength of regularization
-        :param entropy: H(\pi(s_{e,t};\theta))
         :return: tuple (policy_loss, value_loss)
         """
-        q = Variable(q_values)
-        v = Variable(values.data)
+        diff = Variable(q_values) - values
 
         # policy loss
-        loss_p = -(((q - v) * log_a).mean() + beta * entropy)
+        loss_p = -(Variable(diff.data) * log_a).mean()
         # value loss
         # 2 * nn.MSELoss
-        double_loss_v = ((q - values).pow(2)).mean()
+        double_loss_v = (diff.pow(2)).mean()
         loss = loss_p + 0.25 * double_loss_v
         return loss_p, double_loss_v, loss

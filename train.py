@@ -88,10 +88,10 @@ class Master:
         save_step_1 = save_step - 1
         del args
 
-        # gpu variables
-        # policies = Variable(torch.zeros(t_max, n_e))
-        values = Variable(torch.zeros(t_max, n_e))
-        log_a = Variable(torch.zeros(t_max, n_e))
+        # gpu (if possible) variables, will be wrapped by Variable later
+        # policies = Variable(torch.zeros(t_max, n_e))  # unused at the moment
+        values = torch.zeros(t_max, n_e)
+        log_a = torch.zeros(t_max, n_e)
 
         # gpu tensors
         # tensor to store states, updated at every timestep
@@ -117,14 +117,19 @@ class Master:
         loss_p_sum = double_loss_v_sum = entropy_sum = 0
 
         if cuda:
-            # policies = policies.cuda()
-            values = values.cuda()
-            log_a = log_a.cuda()
+            # policies = policies.pin_memory().cuda(async=True)
+            values = values.pin_memory().cuda(async=True)
+            log_a = log_a.pin_memory().cuda(async=True)
 
-            states = states.cuda()
-            rewards = rewards.cuda()
-            terminals = terminals.cuda()
-            q_values = q_values.cuda()
+            states = states.pin_memory().cuda(async=True)
+            rewards = rewards.pin_memory().cuda(async=True)
+            terminals = terminals.pin_memory().cuda(async=True)
+            q_values = q_values.pin_memory().cuda(async=True)
+
+        # wrap variables
+        # policies = Variable(policies)
+        values = Variable(values)
+        log_a = Variable(log_a)
 
         # start training
         self.paac.train()
@@ -143,7 +148,7 @@ class Master:
             values = Variable(values.data)
             log_a = Variable(log_a.data)
 
-            negated_entropy = 0
+            negated_entropy_sum = 0
 
             for t in range(t_max):
                 # check terminals[t_max - 1] when t = 0
@@ -165,10 +170,11 @@ class Master:
 
                 log_paac_p, negated_h = self.paac.log_and_negated_entropy(
                         paac_p, epsilon)
-                negated_entropy += negated_h
+                negated_entropy_sum += negated_h
 
                 actions = list(paac_p_max_indices.data)
 
+                # process no-op environments
                 for i in range(n_e):
                     if current_frames[i] < starting_points[i]:
                         current_frames[i] += 1
@@ -193,29 +199,35 @@ class Master:
 
                         rewards_accumulated[i] += reward
 
-            entropy = -negated_entropy
+            entropy = -negated_entropy_sum
+            entropy_sum += entropy.data[0]
 
             # values of new states
             q_values[t_max] = self.paac.value(Variable(states)).data
+
+            loss_sum = 0
 
             # calculate q_values
             for t in reversed(range(t_max)):
                 q_values[t] = rewards[t] + \
                               (1 - terminals[t]) * gamma * q_values[t + 1]
 
-            loss_p, double_loss_v, loss = self.paac.get_loss(
-                q_values[:-1], values, log_a, beta, entropy
-            )
+                loss_p, double_loss_v, loss = self.paac.get_loss(
+                    q_values[t], values[t], log_a[t]
+                )
+
+                loss_sum += loss
+                loss_p_sum += loss_p.data[0]
+                double_loss_v_sum += double_loss_v.data[0]
+
+            # entropy term
+            loss_sum -= beta * entropy
 
             optim.zero_grad()
             # loss scaling by t_max
-            (t_max * loss).backward()
+            loss_sum.backward()
             torch.nn.utils.clip_grad_norm(model_params, clip)
             optim.step()
-
-            loss_p_sum += loss_p.data[0]
-            double_loss_v_sum += double_loss_v.data[0]
-            entropy_sum += entropy.data[0]
 
             if n % print_step == print_step_1:
                 print('Iteration %d (Timestep %d)' % (n + 1, (n + 1) * t_max))
@@ -337,6 +349,6 @@ if __name__ == '__main__':
         try:
             n = next(master.range_iter)
         except TypeError:
-            n = 0
+            n = master.start
 
         master.save(args.filename, n)
