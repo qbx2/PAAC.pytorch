@@ -1,6 +1,6 @@
 from multiprocessing import Process, Pipe
-import gym
 
+import gym_wrapper as gym
 from paac import PAACNet
 
 
@@ -35,11 +35,7 @@ class Worker(Process):
         envs = []
 
         for _ in range(self.n_e):
-            # Hack gym env to output grayscale image
-            env = gym.make(self.args.env)
-            env.env._get_image = env.env.ale.getScreenGrayscale
-            env.env._get_obs = env.env.ale.getScreenGrayscale
-            envs.append(env)
+            envs.append(gym.make(self.args.env, hack='train'))
 
         return envs
 

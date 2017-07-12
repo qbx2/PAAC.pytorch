@@ -1,9 +1,9 @@
 import argparse
 
-import gym
 import torch
 from torch.autograd import Variable
 
+import gym_wrapper as gym
 from paac import PAACNet, INPUT_CHANNELS, INPUT_IMAGE_SIZE
 
 
@@ -25,8 +25,7 @@ if __name__ == '__main__':
     args = get_args()
     args.cuda = torch.cuda.is_available() and not args.no_cuda
 
-    env = gym.make(args.env)
-    env.env._get_obs = env.env.ale.getScreenGrayscale
+    env = gym.make(args.env, hack='eval')
     ob = env.reset()
 
     num_actions = env.action_space.n
