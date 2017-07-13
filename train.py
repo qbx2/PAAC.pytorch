@@ -308,7 +308,7 @@ def get_args():
     # Optimizer parameters
     parser.add_argument('--lr', '--learning-rate', type=float, default=0.00224,
                         dest='learning_rate', help='Learning rate')
-    parser.add_argument('--use-rmsprop', action='store_true')
+    parser.add_argument('--use-adam', dest='use_rmsprop', action='store_false')
 
     # RMSProp parameters
     parser.add_argument('--alpha', type=float, default=0.99,
