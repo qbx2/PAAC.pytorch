@@ -110,9 +110,11 @@ class Master:
         current_frames = [1] * n_e
         # accumulated rewards to calculate score
         rewards_accumulated = [0] * n_e
+        normalized_rewards_accumulated = [0] * n_e
         # list to store scores of episodes,
         # printed & flushed at every print_step
         scores = []
+        normalized_scores = []
         # sum of loss_p & double_loss_v, printed & flushed at every print_step
         loss_p_sum = double_loss_v_sum = entropy_sum = 0
 
@@ -159,7 +161,11 @@ class Master:
                         current_frames[i] = 1
 
                         scores.append(rewards_accumulated[i])
+                        normalized_scores.append(
+                            normalized_rewards_accumulated[i])
+
                         rewards_accumulated[i] = 0
+                        normalized_rewards_accumulated[i] = 0
 
                         states[i].fill_(0)
 
@@ -194,10 +200,12 @@ class Master:
                     for i, (ob, reward, done) in \
                             enumerate(zip(*obs), worker.env_start):
                         states[i, :-1], states[i, -1] = states[i, 1:], ob
-                        rewards[t, i] = self.normalize_reward(reward)
+                        rewards[t, i] = normalized_rewards = \
+                            self.normalize_reward(reward)
                         terminals[t, i] = done
 
                         rewards_accumulated[i] += reward
+                        normalized_rewards_accumulated[i] += normalized_rewards
 
             entropy = -negated_entropy_sum / n_e
             entropy_sum += entropy.data[0]
@@ -243,6 +251,14 @@ class Master:
                     print('Max_score:', max(scores))
                     print('Min_score:', min(scores))
                     print('Avg_score:', sum(scores) / len(scores))
+                except ValueError:
+                    pass
+
+                try:
+                    print('Max_norm_score:', max(normalized_scores))
+                    print('Min_norm_score:', min(normalized_scores))
+                    print('Avg_norm_score:', sum(normalized_scores) /
+                          len(normalized_scores))
                 except ValueError:
                     pass
 
