@@ -100,6 +100,6 @@ class PAACNet(nn.Module):
         loss_p = -(Variable(diff.data) * log_a).mean()
         # value loss
         # 2 * nn.MSELoss
-        double_loss_v = (diff.pow(2)).mean()
+        double_loss_v = diff.pow(2).mean()
         loss = loss_p + 0.25 * double_loss_v
         return loss_p, double_loss_v, loss

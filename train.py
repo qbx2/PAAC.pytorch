@@ -59,7 +59,7 @@ class Master:
 
     @staticmethod
     def get_starting_point():
-        return random.randint(1, 30)
+        return random.randint(args.min_starting_point, args.max_starting_point)
 
     @staticmethod
     def normalize_reward(reward):
@@ -210,7 +210,7 @@ class Master:
             # calculate q_values
             for t in reversed(range(t_max)):
                 q_values[t] = rewards[t] + \
-                              (1 - terminals[t]) * gamma * q_values[t + 1]
+                              (1. - terminals[t]) * gamma * q_values[t + 1]
 
                 loss_p, double_loss_v, loss = self.paac.get_loss(
                     q_values[t], values[t], log_a[t]
@@ -286,6 +286,11 @@ def get_args():
     parser.add_argument('--no-cuda', action='store_false')
     parser.add_argument('-p', '--print-step', type=int, default=100)
     parser.add_argument('-s', '--save-step', type=int, default=1000)
+    # WARNING: you should check if the agent can control the environment
+    # in the starting point range (e. g. The agent cannot control
+    # until 35th frame in SpaceInvadersDeterministic-v4)
+    parser.add_argument('--min-starting-point', type=int, default=1)
+    parser.add_argument('--max-starting-point', type=int, default=30)
 
     # PAAC parameters
     parser.add_argument('-w', '--n_w', '--workers', type=int,
@@ -303,7 +308,7 @@ def get_args():
     parser.add_argument('-g', '--gamma', type=float, default=0.99)
 
     # Optimizer parameters
-    parser.add_argument('--lr', '--learning-rate', type=float, default=0.001,
+    parser.add_argument('--lr', '--learning-rate', type=float, default=0.00224,
                         dest='learning_rate', help='Learning rate')
     parser.add_argument('--use-rmsprop', action='store_true')
 
