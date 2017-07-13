@@ -199,7 +199,7 @@ class Master:
 
                         rewards_accumulated[i] += reward
 
-            entropy = -negated_entropy_sum
+            entropy = -negated_entropy_sum / n_e
             entropy_sum += entropy.data[0]
 
             # values of new states
@@ -232,9 +232,10 @@ class Master:
             if n % print_step == print_step_1:
                 print('Iteration %d (Timestep %d)' %
                       (n + 1, (n + 1) * t_max * n_e))
-                print('average loss_p:', loss_p_sum / print_step)
-                print('average loss_v:', double_loss_v_sum / 2. / print_step)
-                print('average entropy:', entropy_sum / print_step)
+                print('average loss_p:', loss_p_sum / print_step / t_max)
+                print('average loss_v:',
+                      double_loss_v_sum / 2. / print_step / t_max)
+                print('average entropy:', entropy_sum / print_step / t_max)
 
                 print('Episodes:', len(scores))
 
@@ -262,8 +263,6 @@ class Master:
         print('Loaded PAAC checkpoint (%d) from' % self.start, filename)
 
     def save(self, filename, iteration=0):
-        self.paac.cpu()
-
         checkpoint = {
             'iteration': iteration,
             'paac': self.paac.state_dict(),
@@ -272,9 +271,6 @@ class Master:
 
         torch.save(checkpoint, filename)
         print('Saved PAAC checkpoint (%d) into' % iteration, filename)
-
-        if args.cuda:
-            self.paac.cuda()
 
 
 def get_args():

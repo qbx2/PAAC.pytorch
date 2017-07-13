@@ -21,6 +21,15 @@ def get_args():
     return parser.parse_args()
 
 
+def draw_state(state):
+    import matplotlib.pyplot as plt
+    plt.ion()
+    for i in range(4):
+        plt.subplot(141 + i)
+        plt.imshow(PAACNet.to_pil_image(state[:, i]), cmap='gray')
+    plt.pause(1e-30)
+
+
 if __name__ == '__main__':
     args = get_args()
     args.cuda = torch.cuda.is_available() and not args.no_cuda
@@ -35,7 +44,8 @@ if __name__ == '__main__':
     print('action_meanings:', action_meanings)
 
     paac = PAACNet(num_actions)
-    checkpoint = torch.load(args.filename)
+    checkpoint = torch.load(args.filename,
+                            map_location=lambda storage, loc: storage)
 
     try:
         iteration = checkpoint['iteration']
@@ -59,12 +69,17 @@ if __name__ == '__main__':
         state[0, -1] = PAACNet.preprocess(ob)
         env.render()
 
+        # draw_state(state)
+
         policy, value = paac(Variable(state, volatile=True))
         action = policy.max(1)[1].data[0]
 
         if args.debug:
-            print('policy:', policy)
-            print('value:', value)
+            entropy = paac.entropy(policy, 1e-30)
+
+            print('policy:', policy.data.numpy())
+            print('value:', value.data[0, 0])
+            print('entropy:', entropy.data[0])
             print(action_meanings[action])
 
         ob, reward, done, info = env.step(action)
