@@ -283,7 +283,7 @@ def get_args():
     parser.add_argument('--env', type=str, default='Pong-v0')
     parser.add_argument('-f', '--filename', type=str, default='paac.pkl',
                         help='filename to save the trained model into.')
-    parser.add_argument('--no-cuda', action='store_false')
+    parser.add_argument('--no-cuda', action='store_true')
     parser.add_argument('-p', '--print-step', type=int, default=100)
     parser.add_argument('-s', '--save-step', type=int, default=1000)
     # WARNING: you should check if the agent can control the environment
