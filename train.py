@@ -230,7 +230,8 @@ class Master:
             optim.step()
 
             if n % print_step == print_step_1:
-                print('Iteration %d (Timestep %d)' % (n + 1, (n + 1) * t_max))
+                print('Iteration %d (Timestep %d)' %
+                      (n + 1, (n + 1) * t_max * n_e))
                 print('average loss_p:', loss_p_sum / print_step)
                 print('average loss_v:', double_loss_v_sum / 2. / print_step)
                 print('average entropy:', entropy_sum / print_step)
@@ -254,25 +255,26 @@ class Master:
                     self.save(filename, n + 1)
 
     def load(self, filename):
-        state_dict = torch.load(filename)
+        checkpoint = torch.load(filename)
+        self.start = checkpoint['iteration']
+        self.paac.load_state_dict(checkpoint['paac'])
+        self.optim.load_state_dict(checkpoint['optimizer'])
+        print('Loaded PAAC checkpoint (%d) from' % self.start, filename)
 
-        try:
-            self.start = state_dict['_iteration']
-            del state_dict['_iteration']
-        except KeyError:
-            pass
+    def save(self, filename, iteration=0):
+        self.paac.cpu()
 
-        self.paac.load_state_dict(state_dict)
-        print('Loaded PAAC model (%d) from' % self.start, filename)
+        checkpoint = {
+            'iteration': iteration,
+            'paac': self.paac.state_dict(),
+            'optimizer': self.optim.state_dict()
+        }
 
-    def save(self, filename, _iteration=0):
-        state_dict = self.paac.state_dict()
+        torch.save(checkpoint, filename)
+        print('Saved PAAC checkpoint (%d) into' % iteration, filename)
 
-        if _iteration:
-            state_dict['_iteration'] = _iteration
-
-        torch.save(state_dict, filename)
-        print('Saved PAAC model (%d) into' % _iteration, filename)
+        if args.cuda:
+            self.paac.cuda()
 
 
 def get_args():

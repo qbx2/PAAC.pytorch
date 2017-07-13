@@ -35,16 +35,15 @@ if __name__ == '__main__':
     print('action_meanings:', action_meanings)
 
     paac = PAACNet(num_actions)
-    state_dict = torch.load(args.filename)
+    checkpoint = torch.load(args.filename)
 
     try:
-        iteration = state_dict['_iteration']
-        del state_dict['_iteration']
+        iteration = checkpoint['iteration']
     except KeyError:
         iteration = -1
 
-    paac.load_state_dict(state_dict)
-    print('Loaded PAAC model (%d) from' % iteration, args.filename)
+    paac.load_state_dict(checkpoint['paac'])
+    print('Loaded PAAC checkpoint (%d) from' % iteration, args.filename)
 
     paac.eval()
 
@@ -64,6 +63,8 @@ if __name__ == '__main__':
         action = policy.max(1)[1].data[0]
 
         if args.debug:
+            print('policy:', policy)
+            print('value:', value)
             print(action_meanings[action])
 
         ob, reward, done, info = env.step(action)
