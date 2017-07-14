@@ -1,12 +1,12 @@
 import gym
 
 
-def make(id, hack=None):
-    if 'Deterministic-v4' not in id:
+def make(env_id, hack=None):
+    if 'Deterministic-v4' not in env_id:
         print('[Warning] Use Deterministic-v4 version '
               'to reproduce the results of paper.')
 
-    _env = env = gym.make(id)
+    _env = env = gym.make(env_id)
 
     if hack:
         # Hack gym env to output grayscale image

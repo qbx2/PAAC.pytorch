@@ -8,6 +8,7 @@ from torch.autograd import Variable
 
 from paac import PAACNet, INPUT_CHANNELS, INPUT_IMAGE_SIZE
 from worker import Worker
+from logger import Logger
 
 
 class Master:
@@ -77,14 +78,14 @@ class Master:
         model_params = self.paac.parameters()
         (
             filename, cuda, n_e, t_max, n_max,
-            gamma, beta, print_step, save_step,
+            gamma, beta, log_step, save_step,
             epsilon, clip
         ) = (
             args.filename, args.cuda, args.n_e, args.t_max, args.n_max,
-            args.gamma, args.beta, args.print_step, args.save_step,
+            args.gamma, args.beta, args.log_step, args.save_step,
             args.epsilon, args.clip
         )
-        print_step_1 = print_step - 1
+        log_step_1 = log_step - 1
         save_step_1 = save_step - 1
         del args
 
@@ -112,10 +113,10 @@ class Master:
         rewards_accumulated = [0] * n_e
         normalized_rewards_accumulated = [0] * n_e
         # list to store scores of episodes,
-        # printed & flushed at every print_step
+        # printed & flushed at every log_step
         scores = []
         normalized_scores = []
-        # sum of loss_p & double_loss_v, printed & flushed at every print_step
+        # sum of loss_p & double_loss_v, printed & flushed at every log_step
         loss_p_sum = double_loss_v_sum = entropy_sum = 0
 
         if cuda:
@@ -237,36 +238,13 @@ class Master:
             torch.nn.utils.clip_grad_norm(model_params, clip)
             optim.step()
 
-            if n % print_step == print_step_1:
-                print('Iteration %d (Timestep %d)' %
-                      (n + 1, (n + 1) * t_max * n_e))
-                print('average loss_p:', loss_p_sum / print_step / t_max)
-                print('average loss_v:',
-                      double_loss_v_sum / 2. / print_step / t_max)
-                print('average entropy:', entropy_sum / print_step / t_max)
-
-                print('Episodes:', len(scores))
-
-                try:
-                    print('Max_score:', max(scores))
-                    print('Min_score:', min(scores))
-                    print('Avg_score:', sum(scores) / len(scores))
-                except ValueError:
-                    pass
-
-                try:
-                    print('Max_norm_score:', max(normalized_scores))
-                    print('Min_norm_score:', min(normalized_scores))
-                    print('Avg_norm_score:', sum(normalized_scores) /
-                          len(normalized_scores))
-                except ValueError:
-                    pass
-
-                print()
+            if n % log_step == log_step_1:
+                Logger.log(**locals())
 
                 # flush
                 loss_p_sum = double_loss_v_sum = entropy_sum = 0
-                scores = []
+                scores.clear()
+                normalized_scores.clear()
 
                 if n % save_step == save_step_1:
                     self.save(filename, n + 1)
@@ -298,13 +276,15 @@ def get_args():
     parser.add_argument('-f', '--filename', type=str, default='paac.pkl',
                         help='filename to save the trained model into.')
     parser.add_argument('--no-cuda', action='store_true')
-    parser.add_argument('-p', '--print-step', type=int, default=100)
+    parser.add_argument('-l', '--log-step', type=int, default=100)
     parser.add_argument('-s', '--save-step', type=int, default=1000)
     # WARNING: you should check if the agent can control the environment
     # in the starting point range (e. g. The agent cannot control
     # until 35th frame in SpaceInvadersDeterministic-v4)
     parser.add_argument('--min-starting-point', type=int, default=1)
     parser.add_argument('--max-starting-point', type=int, default=30)
+    # crayon experiment name
+    parser.add_argument('--experiment-name', type=str, default='paac')
 
     # PAAC parameters
     parser.add_argument('-w', '--n_w', '--workers', type=int,
@@ -354,6 +334,8 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
     print(args)
+
+    Logger.set_experiment_name(args.experiment_name)
 
     master = Master(args)
 
