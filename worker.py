@@ -1,4 +1,4 @@
-from multiprocessing import Process, Pipe
+from torch.multiprocessing import Process, Pipe, Event
 
 import gym_wrapper as gym
 from paac import PAACNet
@@ -10,7 +10,9 @@ class Worker(Process):
 
         self.id = worker_id
         self.args = args
-        self.pipe_master, self.pipe_worker = Pipe()  # master to worker
+        # for master use, for worker use
+        self.pipe_master, self.pipe_worker = Pipe()
+        self.exit_event = Event()
 
         # determine n_e
         q, r = divmod(args.n_e, args.n_w)
@@ -27,6 +29,7 @@ class Worker(Process):
 
         self.env_start = worker_id * q
         self.env_slice = slice(self.env_start, self.env_start + n_e)
+        self.env_range = range(self.env_start, self.env_start + n_e)
         self.envs = None
 
         self.start()
@@ -39,34 +42,63 @@ class Worker(Process):
 
         return envs
 
-    def put_states(self, states):
-        self.pipe_worker.send(states)
+    def put_shared_tensors(self, actions, obs, rewards, terminals):
+        assert (actions.is_shared() and obs.is_shared() and
+                rewards.is_shared() and terminals.is_shared())
 
-    def get_observations(self):
-        return self.pipe_master.recv()
+        self.pipe_master.send((actions, obs, rewards, terminals))
 
-    def put_actions(self, actions):
-        self.pipe_master.send(actions)
+    def get_shared_tensors(self):
+        actions, obs, rewards, terminals = self.pipe_worker.recv()
+        assert (actions.is_shared() and obs.is_shared() and
+                rewards.is_shared() and terminals.is_shared())
+        return actions, obs, rewards, terminals
 
-    def get_actions(self):
-        return self.pipe_worker.recv()
+    def set_step_done(self):
+        self.pipe_worker.send_bytes(b'1')
+
+    def wait_step_done(self):
+        self.pipe_master.recv_bytes(1)
+
+    def set_action_done(self):
+        self.pipe_master.send_bytes(b'1')
+
+    def wait_action_done(self):
+        self.pipe_worker.recv_bytes(1)
 
     def run(self):
         preprocess = PAACNet.preprocess
+
         envs = self.envs = self.make_environments()
-        obs = [preprocess(env.reset()) for env in envs]
-        rewards = [0] * self.n_e
-        dones = [False] * self.n_e
+        env_start = self.env_start
+        t_max = self.args.t_max
+        t = 0
+        dones = [False] * self.args.n_e
 
-        while True:
-            self.put_states((obs, rewards, dones))
-            actions = self.get_actions()
+        # get shared tensor
+        actions, obs, rewards, terminals = self.get_shared_tensors()
 
-            for i, (env, action) in enumerate(zip(envs, actions)):
-                if dones[i]:
-                    obs[i] = preprocess(env.reset())
-                    rewards[i] = 0
-                    dones[i] = False
+        for i, env in enumerate(envs, start=env_start):
+            obs[i] = preprocess(env.reset())
+
+        self.set_step_done()
+
+        while not self.exit_event.is_set():
+            self.wait_action_done()
+
+            for i, env in enumerate(envs, start=env_start):
+                if not dones[i]:
+                    ob, reward, done, info = env.step(actions[i])
                 else:
-                    ob, rewards[i], dones[i], info = env.step(action)
-                    obs[i] = preprocess(ob)
+                    ob, reward, done, info = env.reset(), 0, False, None
+
+                obs[i] = preprocess(ob)
+                rewards[t, i] = reward
+                terminals[t, i] = dones[i] = done
+
+            self.set_step_done()
+
+            t += 1
+
+            if t == t_max:
+                t = 0

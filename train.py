@@ -58,18 +58,18 @@ class Master:
         self.start = 0
         self.range_iter = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_details):
+        for worker in self.workers:
+            worker.exit_event.set()
+            worker.set_action_done()
+            worker.join()
+
     @staticmethod
     def get_starting_point():
         return random.randint(args.min_starting_point, args.max_starting_point)
-
-    @staticmethod
-    def normalize_reward(reward):
-        if reward < -1:
-            return -1
-        elif reward > 1:
-            return 1
-
-        return reward
 
     def train(self):
         optim = self.optim
@@ -93,25 +93,29 @@ class Master:
         # policies = Variable(torch.zeros(t_max, n_e))  # unused at the moment
         values = torch.zeros(t_max, n_e)
         log_a = torch.zeros(t_max, n_e)
+        negated_entropy_sum = torch.zeros(1)
 
         # gpu tensors
         # tensor to store states, updated at every timestep
         states = torch.zeros(n_e, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
-        # tensors to store data for a backprop
-        rewards = torch.zeros(t_max, n_e)
-        terminals = torch.zeros(t_max, n_e)
+        actions = torch.zeros(n_e).long()
         q_values = torch.zeros(t_max + 1, n_e)
 
         # cpu tensors
-        # selected actions by policy network to be sent to workers
-        # actions = [0] * n_e
+        # tensors to store data for a backprop
+        _actions = torch.zeros(n_e).long().share_memory_()
+        obs = torch.zeros(n_e, *INPUT_IMAGE_SIZE).share_memory_()
+        rewards = torch.zeros(t_max, n_e).share_memory_()
+        terminals = torch.zeros(t_max, n_e).share_memory_()
+
+        # accumulated rewards to calculate score
+        rewards_accumulated = torch.zeros(n_e)
+        normalized_rewards_accumulated = torch.zeros(n_e)
+
         # if current_frames < starting_points: action = no-op
         # else: action = policy()
         starting_points = [self.get_starting_point() for _ in range(n_e)]
         current_frames = [1] * n_e
-        # accumulated rewards to calculate score
-        rewards_accumulated = [0] * n_e
-        normalized_rewards_accumulated = [0] * n_e
         # list to store scores of episodes,
         # printed & flushed at every log_step
         scores = []
@@ -123,26 +127,26 @@ class Master:
             # policies = policies.pin_memory().cuda(async=True)
             values = values.pin_memory().cuda(async=True)
             log_a = log_a.pin_memory().cuda(async=True)
+            negated_entropy_sum = \
+                negated_entropy_sum.pin_memory().cuda(async=True)
 
             states = states.pin_memory().cuda(async=True)
-            rewards = rewards.pin_memory().cuda(async=True)
-            terminals = terminals.pin_memory().cuda(async=True)
+            actions = actions.pin_memory().cuda(async=True)
             q_values = q_values.pin_memory().cuda(async=True)
 
         # wrap variables
         # policies = Variable(policies)
         values = Variable(values)
         log_a = Variable(log_a)
+        negated_entropy_sum = Variable(negated_entropy_sum)
 
         # start training
         self.paac.train()
 
-        # init states
+        # send states
         for worker in workers:
-            obs, *_ = worker.get_observations()
-
-            for i, ob in enumerate(obs, worker.env_start):
-                states[i, -1] = ob
+            worker.put_shared_tensors(_actions, obs, rewards, terminals)
+            worker.wait_step_done()
 
         self.range_iter = iter(range(self.start, n_max))
 
@@ -150,13 +154,16 @@ class Master:
             # policies = Variable(policies.data)
             values = Variable(values.data)
             log_a = Variable(log_a.data)
+            negated_entropy_sum = Variable(negated_entropy_sum.data)
 
-            negated_entropy_sum = 0
+            negated_entropy_sum.data.zero_()
 
             for t in range(t_max):
-                # check terminals[t_max - 1] when t = 0
-                for i, terminal in enumerate(terminals[t - 1]):
-                    if terminal:
+                # yes, check terminals[-1] when t = 0
+                nonzero_terminals = terminals[t - 1].nonzero()
+
+                if len(nonzero_terminals.size()):
+                    for i in nonzero_terminals.squeeze(1):
                         # reset done environments
                         starting_points[i] = self.get_starting_point()
                         current_frames[i] = 1
@@ -168,7 +175,7 @@ class Master:
                         rewards_accumulated[i] = 0
                         normalized_rewards_accumulated[i] = 0
 
-                        states[i].fill_(0)
+                        states[i].zero_()
 
                 # states must be cloned for gradient calculation
                 paac_p, paac_v = self.paac(Variable(states.clone()))
@@ -179,7 +186,7 @@ class Master:
                         paac_p, epsilon)
                 negated_entropy_sum += negated_h
 
-                actions = list(paac_p_max_indices.data)
+                actions.copy_(paac_p_max_indices.data)
 
                 # process no-op environments
                 for i in range(n_e):
@@ -188,25 +195,24 @@ class Master:
                         # policies[t, i] = paac_p[i, self.NOOP]
                         actions[i] = self.no_op
 
-                    log_a[t, i] = log_paac_p[i, actions[i]]
+                log_a[t] = log_paac_p.gather(
+                    1, Variable(actions.unsqueeze(1).clone()))
 
                 # perform actions
+                _actions.copy_(actions)
+
                 for worker in workers:
-                    worker.put_actions(actions[worker.env_slice])
+                    worker.set_action_done()
 
                 # get new observations
                 for worker in workers:
-                    obs = worker.get_observations()
+                    worker.wait_step_done()
 
-                    for i, (ob, reward, done) in \
-                            enumerate(zip(*obs), worker.env_start):
-                        states[i, :-1], states[i, -1] = states[i, 1:], ob
-                        rewards[t, i] = normalized_rewards = \
-                            self.normalize_reward(reward)
-                        terminals[t, i] = done
-
-                        rewards_accumulated[i] += reward
-                        normalized_rewards_accumulated[i] += normalized_rewards
+                states[:, :-1], states[:, -1] = states[:, 1:], obs
+                rewards_accumulated += rewards[t]
+                # normalize rewards
+                rewards[t].clamp_(-1, 1)
+                normalized_rewards_accumulated += rewards[t]
 
             entropy = -negated_entropy_sum / n_e
             entropy_sum += entropy.data[0]
@@ -216,10 +222,17 @@ class Master:
 
             loss_sum = 0
 
+            if cuda:
+                _rewards = rewards.cuda()
+                _terminals = terminals.cuda()
+            else:
+                _rewards = rewards
+                _terminals = terminals
+
             # calculate q_values
             for t in reversed(range(t_max)):
-                q_values[t] = rewards[t] + \
-                              (1. - terminals[t]) * gamma * q_values[t + 1]
+                q_values[t] = _rewards[t] + \
+                              (1. - _terminals[t]) * gamma * q_values[t + 1]
 
                 loss_p, double_loss_v, loss = self.paac.get_loss(
                     q_values[t], values[t], log_a[t]
@@ -337,19 +350,20 @@ if __name__ == '__main__':
 
     Logger.set_experiment_name(args.experiment_name)
 
-    master = Master(args)
-
-    try:
-        master.load(args.filename)
-    except FileNotFoundError as e:
-        print(e)
-
-    try:
-        master.train()
-    finally:
+    with Master(args) as master:
         try:
-            n = next(master.range_iter)
-        except TypeError:
-            n = master.start
+            master.load(args.filename)
+        except FileNotFoundError as e:
+            print(e)
 
-        master.save(args.filename, n)
+        try:
+            master.train()
+        finally:
+            try:
+                n = next(master.range_iter)
+            except TypeError:
+                n = master.start
+            except StopIteration:
+                n = args.n_max
+
+            master.save(args.filename, n)
