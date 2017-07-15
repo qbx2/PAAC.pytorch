@@ -1,23 +1,3 @@
-cc = None
-
-try:
-    from pycrayon import CrayonClient
-
-    cc = CrayonClient(hostname='localhost')
-except ImportError:
-    print('Importing pycrayon has been failed. '
-          'Some features of Logger will disabled.')
-
-    CrayonClient = None
-except ValueError as e:
-    print(e)
-
-    if input('continue (y/n)? ').lower() != 'y':
-        raise
-else:
-    import requests
-
-
 class Logger:
     exp = None
 
@@ -63,14 +43,20 @@ class Logger:
         print()
 
         if Logger.exp is not None:
+            import requests
+
             try:
                 Logger.crayon_log(**locals())
             except requests.ConnectionError as e:
                 print(e)
 
     @staticmethod
-    def set_experiment_name(experiment_name):
-        if cc is not None and Logger.exp is None:
+    def init_crayon(hostname, experiment_name):
+        try:
+            from pycrayon import CrayonClient
+
+            cc = CrayonClient(hostname)
+
             try:
                 Logger.exp = cc.create_experiment(experiment_name)
             except ValueError as e:
@@ -80,6 +66,14 @@ class Logger:
                     raise
 
                 Logger.exp = cc.open_experiment(experiment_name)
+        except ImportError:
+            print('Importing pycrayon has been failed. '
+                  'Some features of Logger will disabled.')
+        except ValueError as e:
+            print(e)
+
+            if input('continue (y/n)? ').lower() != 'y':
+                raise
 
     @staticmethod
     def crayon_log(timestep, average_loss_p, average_loss_v, average_entropy,

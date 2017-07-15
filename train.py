@@ -179,14 +179,14 @@ class Master:
 
                 # states must be cloned for gradient calculation
                 paac_p, paac_v = self.paac(Variable(states.clone()))
-                paac_p_max_values, paac_p_max_indices = paac_p.max(1)
+                # paac_p_max_values, paac_p_max_indices = paac_p.max(1)
                 values[t] = paac_v
 
                 log_paac_p, negated_h = self.paac.log_and_negated_entropy(
-                        paac_p, epsilon)
+                    paac_p, epsilon)
                 negated_entropy_sum += negated_h
 
-                actions.copy_(paac_p_max_indices.data)
+                actions.copy_(paac_p.multinomial().squeeze(1).data)
 
                 # process no-op environments
                 for i in range(n_e):
@@ -297,6 +297,7 @@ def get_args():
     parser.add_argument('--min-starting-point', type=int, default=1)
     parser.add_argument('--max-starting-point', type=int, default=30)
     # crayon experiment name
+    parser.add_argument('--crayon-host', type=str, default='localhost')
     parser.add_argument('--experiment-name', type=str, default='paac')
 
     # PAAC parameters
@@ -348,7 +349,7 @@ if __name__ == '__main__':
     args = get_args()
     print(args)
 
-    Logger.set_experiment_name(args.experiment_name)
+    Logger.init_crayon(args.crayon_host, args.experiment_name)
 
     with Master(args) as master:
         try:

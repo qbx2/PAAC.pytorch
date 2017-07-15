@@ -17,6 +17,7 @@ def get_args():
                         help='filename to save the trained model into.')
     parser.add_argument('--no-cuda', action='store_true')
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('--use-multinomial', action='store_true')
 
     return parser.parse_args()
 
@@ -72,7 +73,11 @@ if __name__ == '__main__':
         # draw_state(state)
 
         policy, value = paac(Variable(state, volatile=True))
-        action = policy.max(1)[1].data[0]
+
+        if not args.use_multinomial:
+            action = policy.max(1)[1].data[0]
+        else:
+            action = policy.multinomial()[0].data[0]
 
         if args.debug:
             entropy = paac.entropy(policy, 1e-30)
