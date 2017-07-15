@@ -85,8 +85,8 @@ class Master:
             args.gamma, args.beta, args.log_step, args.save_step,
             args.epsilon, args.clip
         )
-        log_step_1 = log_step - 1
-        save_step_1 = save_step - 1
+        log_step_1 = (self.start - 1) % log_step
+        save_step_1 = (self.start - 1) % save_step
         del args
 
         # gpu (if possible) variables, will be wrapped by Variable later

@@ -33,6 +33,17 @@ class PAACNet(nn.Module):
 
         self.value_output = nn.Linear(512, 1)
 
+        # init weights and biases
+        import torch.nn.init as init
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.kaiming_normal(m.weight)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                init.kaiming_normal(m.weight)
+                m.bias.data.zero_()
+
     @classmethod
     def preprocess(cls, x):
         r"""preprocesses & converts the output of gym environment
