@@ -98,7 +98,6 @@ class Master:
         # gpu tensors
         # tensor to store states, updated at every timestep
         states = torch.zeros(n_e, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
-        actions = torch.zeros(n_e).long()
         q_values = torch.zeros(t_max + 1, n_e)
 
         # cpu tensors
@@ -125,14 +124,12 @@ class Master:
 
         if cuda:
             # policies = policies.pin_memory().cuda(async=True)
-            values = values.pin_memory().cuda(async=True)
-            log_a = log_a.pin_memory().cuda(async=True)
-            negated_entropy_sum = \
-                negated_entropy_sum.pin_memory().cuda(async=True)
+            values = values.cuda()
+            log_a = log_a.cuda()
+            negated_entropy_sum = negated_entropy_sum.cuda()
 
-            states = states.pin_memory().cuda(async=True)
-            actions = actions.pin_memory().cuda(async=True)
-            q_values = q_values.pin_memory().cuda(async=True)
+            states = states.cuda()
+            q_values = q_values.cuda()
 
         # wrap variables
         # policies = Variable(policies)
@@ -186,20 +183,19 @@ class Master:
                     paac_p, epsilon)
                 negated_entropy_sum += negated_h
 
-                actions.copy_(paac_p.multinomial().squeeze(1).data)
+                actions = paac_p.multinomial().data
 
                 # process no-op environments
                 for i in range(n_e):
                     if current_frames[i] < starting_points[i]:
                         current_frames[i] += 1
                         # policies[t, i] = paac_p[i, self.NOOP]
-                        actions[i] = self.no_op
+                        actions[i, 0] = self.no_op
 
-                log_a[t] = log_paac_p.gather(
-                    1, Variable(actions.unsqueeze(1).clone()))
+                log_a[t] = log_paac_p.gather(1, Variable(actions.clone()))
 
                 # perform actions
-                _actions.copy_(actions)
+                _actions.copy_(actions.squeeze(1))
 
                 for worker in workers:
                     worker.set_action_done()
@@ -239,8 +235,8 @@ class Master:
                 )
 
                 loss_sum += loss
-                loss_p_sum += loss_p.data[0]
-                double_loss_v_sum += double_loss_v.data[0]
+                loss_p_sum += loss_p
+                double_loss_v_sum += double_loss_v
 
             # entropy term
             loss_sum -= beta * entropy
@@ -252,6 +248,8 @@ class Master:
             optim.step()
 
             if n % log_step == log_step_1:
+                loss_p_sum = loss_p_sum.data[0]
+                double_loss_v_sum = double_loss_v_sum.data[0]
                 Logger.log(**locals())
 
                 # flush
@@ -361,7 +359,7 @@ if __name__ == '__main__':
             master.train()
         finally:
             try:
-                n = next(master.range_iter)
+                n = next(master.range_iter) - 1
             except TypeError:
                 n = master.start
             except StopIteration:
