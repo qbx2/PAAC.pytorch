@@ -1,3 +1,6 @@
+from threading import Thread
+
+
 class Logger:
     exp = None
 
@@ -43,12 +46,7 @@ class Logger:
         print()
 
         if Logger.exp is not None:
-            import requests
-
-            try:
-                Logger.crayon_log(**locals())
-            except requests.ConnectionError as e:
-                print(e)
+            Thread(target=Logger.crayon_log(**locals()), daemon=True).start()
 
     @staticmethod
     def init_crayon(hostname, experiment_name):
@@ -80,28 +78,34 @@ class Logger:
                    max_score=None, min_score=None, avg_score=None,
                    max_norm_score=None, min_norm_score=None,
                    avg_norm_score=None, **kwargs):
-        exp = Logger.exp
-        exp.add_scalar_value("loss_p", average_loss_p, step=timestep)
-        exp.add_scalar_value("loss_v", average_loss_v, step=timestep)
-        exp.add_scalar_value("entropy", average_entropy, step=timestep)
+        import requests
 
-        if max_score is not None:
-            exp.add_scalar_value("score_max", max_score, step=timestep)
+        try:
+            exp = Logger.exp
+            exp.add_scalar_value("loss_p", average_loss_p, step=timestep)
+            exp.add_scalar_value("loss_v", average_loss_v, step=timestep)
+            exp.add_scalar_value("entropy", average_entropy, step=timestep)
 
-        if min_score is not None:
-            exp.add_scalar_value("score_min", min_score, step=timestep)
+            if max_score is not None:
+                exp.add_scalar_value("score_max", max_score, step=timestep)
 
-        if avg_score is not None:
-            exp.add_scalar_value("score_avg", avg_score, step=timestep)
+            if min_score is not None:
+                exp.add_scalar_value("score_min", min_score, step=timestep)
 
-        if max_norm_score is not None:
-            exp.add_scalar_value("norm_score_max", max_norm_score,
-                                 step=timestep)
+            if avg_score is not None:
+                exp.add_scalar_value("score_avg", avg_score, step=timestep)
 
-        if min_norm_score is not None:
-            exp.add_scalar_value("norm_score_min", min_norm_score,
-                                 step=timestep)
+            if max_norm_score is not None:
+                exp.add_scalar_value("norm_score_max", max_norm_score,
+                                     step=timestep)
 
-        if avg_norm_score is not None:
-            exp.add_scalar_value("norm_score_avg", avg_norm_score,
-                                 step=timestep)
+            if min_norm_score is not None:
+                exp.add_scalar_value("norm_score_min", min_norm_score,
+                                     step=timestep)
+
+            if avg_norm_score is not None:
+                exp.add_scalar_value("norm_score_avg", avg_norm_score,
+                                     step=timestep)
+
+        except requests.ConnectionError as e:
+            print(e)
