@@ -1,7 +1,7 @@
 # PAAC.pytorch
 Pytorch implementation of the PAAC algorithm presented in "Efficient Parallel Methods for Deep Reinforcement Learning". PAAC is the abbreviation of Parallel Advantage Actor-Critic.
 
-Currently, because the PAAC network is not using LSTM, the evaluation result is not very good. I'm working on the LSTM version of PAAC.
+Currently, because the PAAC network is not using LSTM, the evaluation result is not very good. I'm working on the LSTM version of PAAC (waiting for a new graphic card due to lack of current gpu's memory.)
 
 The original paper is here: https://arxiv.org/abs/1705.04862
 
