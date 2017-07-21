@@ -14,3 +14,6 @@ Libraries used in this project:
 * torchvision==0.1.8
 * Pillow==4.1.1
 * gym@797a25d1b1a8823b305fdb575c4378a5c288b432
+
+# Result (BreakoutDeterministic-v4 training log)
+![log](log.png)
