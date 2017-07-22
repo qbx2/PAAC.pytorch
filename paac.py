@@ -29,11 +29,11 @@ class PAACNet(nn.Module):
         self.lstm = nn.LSTM(512, 256)
 
         self.policy_output = nn.Sequential(
-            nn.Linear(512, num_actions),
+            nn.Linear(256, num_actions),
             nn.Softmax()
         )
 
-        self.value_output = nn.Linear(512, 1)
+        self.value_output = nn.Linear(256, 1)
 
         # init weights and biases
         for m in self.modules():
