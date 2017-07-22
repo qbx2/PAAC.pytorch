@@ -25,8 +25,8 @@ class PAACNet(nn.Module):
             nn.ReLU()
         )
 
-        self.lstm = nn.LSTM(3136, 256)
-        self.fc = nn.Linear(256, 512)
+        self.fc = nn.Linear(3136, 512)
+        self.lstm = nn.LSTM(512, 256)
 
         self.policy_output = nn.Sequential(
             nn.Linear(512, num_actions),
@@ -71,22 +71,25 @@ class PAACNet(nn.Module):
         """
         x = self.conv_layers(x)
         x = x.view(x.size(0), -1)
+        x = self.fc(x)
         x, hidden = self.lstm(x.unsqueeze(0), hidden)
-        x = self.fc(x.squeeze(0))
+        x = x.squeeze(0)
         return self.policy_output(x), self.value_output(x), hidden
 
     def policy(self, x, hidden=None):
         x = self.conv_layers(x)
         x = x.view(x.size(0), -1)
+        x = self.fc(x)
         x, hidden = self.lstm(x.unsqueeze(0), hidden)
-        x = self.fc(x.squeeze(0))
+        x = x.squeeze(0)
         return self.policy_output(x), hidden
 
     def value(self, x, hidden=None):
         x = self.conv_layers(x)
         x = x.view(x.size(0), -1)
+        x = self.fc(x)
         x, hidden = self.lstm(x.unsqueeze(0), hidden)
-        x = self.fc(x.squeeze(0))
+        x = x.squeeze(0)
         return self.value_output(x), hidden
 
     @staticmethod
