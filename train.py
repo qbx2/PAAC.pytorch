@@ -6,7 +6,7 @@ import torch
 import torch.nn
 from torch.autograd import Variable
 
-from paac import PAACNet, INPUT_CHANNELS, INPUT_IMAGE_SIZE
+from paac import PAACNet, INPUT_IMAGE_SIZE
 from worker import Worker
 from logger import Logger
 
@@ -94,16 +94,16 @@ class Master:
         values = torch.zeros(t_max, n_e)
         log_a = torch.zeros(t_max, n_e)
         negated_entropy_sum = torch.zeros(1)
+        hidden = (self.paac.get_initial_hidden(n_e),) * 2
 
         # gpu tensors
-        # tensor to store states, updated at every timestep
-        states = torch.zeros(n_e, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
+        states = None
         q_values = torch.zeros(t_max + 1, n_e)
 
         # cpu tensors
         # tensors to store data for a backprop
         _actions = torch.zeros(n_e).long().share_memory_()
-        obs = torch.zeros(n_e, *INPUT_IMAGE_SIZE).share_memory_()
+        obs = torch.zeros(n_e, 1, *INPUT_IMAGE_SIZE).share_memory_()
         rewards = torch.zeros(t_max, n_e).share_memory_()
         terminals = torch.zeros(t_max, n_e).share_memory_()
 
@@ -127,8 +127,8 @@ class Master:
             values = values.cuda()
             log_a = log_a.cuda()
             negated_entropy_sum = negated_entropy_sum.cuda()
+            hidden = hidden[0].cuda(), hidden[1].cuda()
 
-            states = states.cuda()
             q_values = q_values.cuda()
 
         # wrap variables
@@ -136,11 +136,12 @@ class Master:
         values = Variable(values)
         log_a = Variable(log_a)
         negated_entropy_sum = Variable(negated_entropy_sum)
+        hidden = Variable(hidden[0]), Variable(hidden[1])
 
         # start training
         self.paac.train()
 
-        # send states
+        # send shared tensors
         for worker in workers:
             worker.put_shared_tensors(_actions, obs, rewards, terminals)
             worker.wait_step_done()
@@ -148,6 +149,7 @@ class Master:
         self.range_iter = iter(range(self.start, n_max))
 
         for n in self.range_iter:
+            hidden = Variable(hidden[0].data), Variable(hidden[1].data)
             # policies = Variable(policies.data)
             values = Variable(values.data)
             log_a = Variable(log_a.data)
@@ -172,10 +174,16 @@ class Master:
                         rewards_accumulated[i] = 0
                         normalized_rewards_accumulated[i] = 0
 
-                        states[i].zero_()
+                        hidden[0].data[0, i].zero_()
+                        hidden[1].data[0, i].zero_()
 
                 # states must be cloned for gradient calculation
-                paac_p, paac_v = self.paac(Variable(states.clone()))
+                if cuda:
+                    states = obs.cuda()
+                else:
+                    states = obs.clone()
+
+                paac_p, paac_v, hidden = self.paac(Variable(states), hidden)
                 # paac_p_max_values, paac_p_max_indices = paac_p.max(1)
                 values[t] = paac_v
 
@@ -204,7 +212,6 @@ class Master:
                 for worker in workers:
                     worker.wait_step_done()
 
-                states[:, :-1], states[:, -1] = states[:, 1:], obs
                 rewards_accumulated += rewards[t]
                 # normalize rewards
                 rewards[t].clamp_(-1, 1)
@@ -214,7 +221,7 @@ class Master:
             entropy_sum += entropy.data[0]
 
             # values of new states
-            q_values[t_max] = self.paac.value(Variable(states)).data
+            q_values[t_max] = self.paac.value(Variable(states), hidden)[0].data
 
             loss_sum = 0
 
@@ -287,10 +294,11 @@ def get_args():
     parser.add_argument('-f', '--filename', type=str, default='paac.pkl',
                         help='filename to save the trained model into.')
     parser.add_argument('--no-cuda', action='store_true')
+    parser.add_argument('--no-cudnn', action='store_true')
     parser.add_argument('-l', '--log-step', type=int, default=100)
     parser.add_argument('-s', '--save-step', type=int, default=1000)
     # WARNING: you should check if the agent can control the environment
-    # in the starting point range (e. g. The agent cannot control
+    # in the starting point range (e.g. The agent cannot control
     # until 35th frame in SpaceInvadersDeterministic-v4)
     parser.add_argument('--min-starting-point', type=int, default=1)
     parser.add_argument('--max-starting-point', type=int, default=30)
@@ -346,6 +354,9 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
     print(args)
+
+    if args.no_cudnn:
+        torch.backends.cudnn.enabled = False
 
     Logger.init_crayon(args.crayon_host, args.experiment_name)
 

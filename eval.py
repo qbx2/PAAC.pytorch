@@ -4,7 +4,7 @@ import torch
 from torch.autograd import Variable
 
 import gym_wrapper as gym
-from paac import PAACNet, INPUT_CHANNELS, INPUT_IMAGE_SIZE
+from paac import PAACNet, INPUT_IMAGE_SIZE
 
 
 def get_args():
@@ -58,7 +58,8 @@ if __name__ == '__main__':
 
     paac.eval()
 
-    state = torch.zeros(1, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
+    state = torch.zeros(1, 1, *INPUT_IMAGE_SIZE)
+    hidden = (Variable(paac.get_initial_hidden(1), volatile=True),) * 2
     score = 0
 
     if args.cuda:
@@ -66,13 +67,14 @@ if __name__ == '__main__':
         state = state.pin_memory().cuda(async=True)
 
     while True:
-        state[0, :-1] = state[0, 1:]
-        state[0, -1] = PAACNet.preprocess(ob)
+        hidden = Variable(hidden[0].data), Variable(hidden[1].data)
+
+        state[0] = PAACNet.preprocess(ob)
         env.render()
 
         # draw_state(state)
 
-        policy, value = paac(Variable(state, volatile=True))
+        policy, value, hidden = paac(Variable(state, volatile=True), hidden)
 
         if not args.use_multinomial:
             action = policy.max(1)[1].data[0]
@@ -93,5 +95,6 @@ if __name__ == '__main__':
         if done:
             print('score:', score)
             score = 0
-            state.fill_(0)
+            hidden[0].data.zero_()
+            hidden[1].data.zero_()
             ob = env.reset()
