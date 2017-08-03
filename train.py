@@ -98,6 +98,7 @@ class Master:
         # gpu tensors
         # tensor to store states, updated at every timestep
         states = torch.zeros(n_e, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
+        _states = torch.zeros(t_max, n_e, INPUT_CHANNELS, *INPUT_IMAGE_SIZE)
         q_values = torch.zeros(t_max + 1, n_e)
 
         # cpu tensors
@@ -129,6 +130,7 @@ class Master:
             negated_entropy_sum = negated_entropy_sum.cuda()
 
             states = states.cuda()
+            _states = _states.cuda()
             q_values = q_values.cuda()
 
         # wrap variables
@@ -175,7 +177,8 @@ class Master:
                         states[i].zero_()
 
                 # states must be cloned for gradient calculation
-                paac_p, paac_v = self.paac(Variable(states.clone()))
+                _states[t].copy_(states)
+                paac_p, paac_v = self.paac(Variable(_states[t]))
                 # paac_p_max_values, paac_p_max_indices = paac_p.max(1)
                 values[t] = paac_v
 

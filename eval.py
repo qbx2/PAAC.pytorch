@@ -75,9 +75,9 @@ if __name__ == '__main__':
         policy, value = paac(Variable(state, volatile=True))
 
         if not args.use_multinomial:
-            action = policy.max(1)[1].data[0]
+            action = policy.max(1)[1].cpu().data[0, 0]
         else:
-            action = policy.multinomial()[0].data[0]
+            action = policy.multinomial()[0].cpu().data[0]
 
         if args.debug:
             entropy = paac.entropy(policy, 1e-30)
