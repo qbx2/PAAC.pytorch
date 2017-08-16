@@ -89,12 +89,12 @@ class PAACNet(nn.Module):
         :param epsilon: epsilon for numerical stability
         :return: entropy
         """
-        return -(x * (x + epsilon).log()).sum(0).sum(1)
+        return -(x * (x + epsilon).log()).sum(0).sum(0)
 
     @staticmethod
     def log_and_negated_entropy(x, epsilon):
         log_x = (x + epsilon).log()
-        return log_x, (x * log_x).sum(0).sum(1)
+        return log_x, (x * log_x).sum(0).sum(0)
 
     @staticmethod
     def get_loss(q_values, values, log_a):
