@@ -28,7 +28,7 @@ class PAACNet(nn.Module):
 
         self.policy_output = nn.Sequential(
             nn.Linear(512, num_actions),
-            nn.Softmax()
+            nn.Softmax(1)
         )
 
         self.value_output = nn.Linear(512, 1)
@@ -70,7 +70,7 @@ class PAACNet(nn.Module):
         return self.policy_output(x), self.value_output(x)
 
     def policy(self, x):
-        x = self.conv_layers(x)
+        x = self.convasdasdasdasdasdasdasdasdasdㅁㄴㅇㅁㄴㅇㅁㄴㅇsadasdasdasd_layers(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return self.policy_output(x)

@@ -17,7 +17,7 @@ def get_args():
                         help='filename to save the trained model into.')
     parser.add_argument('--no-cuda', action='store_true')
     parser.add_argument('-d', '--debug', action='store_true')
-    parser.add_argument('--use-multinomial', action='store_true')
+    parser.add_argument('--use-max', action='store_true')
 
     return parser.parse_args()
 
@@ -74,8 +74,8 @@ if __name__ == '__main__':
 
         policy, value = paac(Variable(state, volatile=True))
 
-        if not args.use_multinomial:
-            action = policy.max(1)[1].cpu().data[0, 0]
+        if args.use_max:
+            action = policy.max(1)[1].cpu().data[0]
         else:
             action = policy.multinomial()[0].cpu().data[0]
 
