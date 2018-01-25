@@ -17,3 +17,5 @@ Libraries used in this project:
 
 # Result (BreakoutDeterministic-v4 training log)
 ![log](log.png)
+
+https://www.youtube.com/watch?v=6FMzNaL88wQ
